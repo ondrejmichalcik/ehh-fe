@@ -1,0 +1,50 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ .Values.appName }}-service
+  namespace: {{ .Release.Namespace }}
+spec:
+  gateways:
+  - istio-system/public-gateway
+  hosts:
+  - ehh-fe-ehh.stxcn.codenow.com
+  http:
+  - corsPolicy:
+      allowCredentials: true
+      allowHeaders:
+      - content-type
+      allowMethods:
+      - POST
+      - GET
+      - OPTIONS
+      - PUT
+      - DELETE
+      allowOrigin:
+      - '*'
+      exposeHeaders:
+      - '*'
+    match:
+    - uri:
+        prefix: /default/grafana
+    route:
+    - destination:
+        host: prometheus-operator-grafana.monitoring-system.svc.cluster.local
+        port:
+          number: 80
+      headers:
+        request:
+          remove:
+          - Authorization
+        response:
+          add:
+            Access-Control-Allow-Origin: '*'
+          remove:
+          - x-frame-options
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: ehh-fe.ehh.svc.cluster.local
+        port:
+          number: 3000

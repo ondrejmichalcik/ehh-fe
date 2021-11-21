@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "application.fullname" . }}
+  labels:
+    app: {{ template "application.name" . }}
+    chart: {{ template "application.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    configHash: "{{ .Values.configHash }}"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "application.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.fluentbit.istioProxy.enabled }}
+        fluentbit.io/parser-istio-proxy: {{ .Values.fluentbit.istioProxy.parser }}
+        {{- end }}
+        fluentbit.io/parser-{{ .Chart.Name }}: {{ .Values.fluentbit.parser }}
+        configHash: "{{ .Values.configHash }}"
+      labels:
+        app: {{ template "application.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      imagePullSecrets:
+      - name: docker-user-registry
+      volumes:
+        {{- $configMapName := .Chart.Name -}}
+        {{ range $key, $val := .Values.configFiles }}
+        - name: "conf{{ $key | replace "." "-" | lower}}"
+          configMap:
+            name: {{ $configMapName }}
+            items:
+            - key: {{ $key }}
+              path: {{ $key }}
+        {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- range $key, $val := .Values.environmentVariables }}
+            - name: {{ $key }}
+              value: '{{ $val }}'
+            {{- end }}
+          volumeMounts:
+            {{- range $key, $val := .Values.configFiles }}
+            - name: "conf{{ $key | replace "." "-" | lower }}"
+              mountPath: /usr/share/nginx/html/app/{{ $key }}
+              subPath: {{ $key}}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
